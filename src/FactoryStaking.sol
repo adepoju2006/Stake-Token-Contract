@@ -1,5 +1,11 @@
+
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.11;
+// pragma solidity 0.8.11;
+pragma solidity ^0.8.13;
+
+
+// import "bsc-library/contracts/IBEP20.sol";
+// import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 
 interface IBEP20 {
@@ -98,41 +104,27 @@ interface IBEP20 {
 }
 
 
-// interface IStaking {
-//     //  function startReward() external onlyOwner {}
-//     //  function startReward () external  {}
-//     //   function pendingReward(address _user) external view returns (uint256) {}
-// }
 
-pragma solidity ^0.8.11;
+pragma solidity ^0.8.13;
 
 import {TaccStaking, Ownable} from "./Staking.sol";
-
 
 contract Factory is Ownable  {
 
     event NewStakeContract(address indexed stakeAddress);
     error  CallertNotOwner();
-    // address public immutable owner;
+
       address[] public deployedPools;
 
     constructor()  {  
-        // owner = msg.sender;
           
+
     }
-
-    // modifier  onlyOwner() {
-    //     require(msg.sender == owner, "Caller not the Owner");
-    //     _;
-    // }
-
-
 
     function deployPool(
          address _stakedToken,
-         address _rewardToken,
-         address _bnbUsdPriceFeed,
-         address _feeCollector,
+        address _rewardToken,
+        address _feeCollector,
         uint256 _lockDuration,
         uint256 _apy,
         uint256 _exitPenaltyPerc
@@ -143,19 +135,19 @@ contract Factory is Ownable  {
         // bytes memory bytecode = type(TaccStaking).creationCode;
          bytes memory bytecode = abi.encodePacked(
             type(TaccStaking).creationCode,
-            abi.encode(_stakedToken, _rewardToken, _bnbUsdPriceFeed,  _feeCollector, _lockDuration, _apy, _exitPenaltyPerc)
+            abi.encode(_stakedToken, _rewardToken, _feeCollector,_lockDuration, _apy, _exitPenaltyPerc)
         );
-        bytes32 salt = keccak256(abi.encodePacked(_stakedToken, _rewardToken, _lockDuration, _apy,
+        bytes32 salt = keccak256(abi.encodePacked(_stakedToken, _rewardToken, _feeCollector, _lockDuration, _apy,
         _exitPenaltyPerc ));
 
-         address stakeAddress;
+         address payable stakeAddress;
    
         assembly {
             stakeAddress := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
           
           TaccStaking(stakeAddress).transferOwnership(owner());
-          TaccStaking(stakeAddress).startReward();
+        //   TaccStaking(stakeAddress).startReward();
           deployedPools.push(stakeAddress);
 
 
