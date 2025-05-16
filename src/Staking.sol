@@ -4,6 +4,8 @@
 //SPDX-License-Identifier:MIT
 pragma solidity ^0.8.13;
 
+import {PriceConverter} from "./PriceConverter.sol";
+
 /*
  * @dev Provides information about the current execution context, including the
  * sender of the transaction and its data. While these are generally available
@@ -676,6 +678,11 @@ abstract contract ReentrancyGuard {
     }
 }
 
+// interface IPriceConver {
+//     function getPice() internal view returns(uint256){}
+    
+// }
+
 contract TaccStaking is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
@@ -708,9 +715,9 @@ contract TaccStaking is Ownable, ReentrancyGuard {
     uint256 public lockDuration;
     uint256 public exitPenaltyPerc;
     // IOrocleAggregatorV2 private  priceFeed;
-    uint256 public fixedUsdFee = 0.00077 ether; 
+    uint256 public fixedUsdFee = 0.5 * 10 ** 18; 
     address public feeCollector;
-
+     PriceConverter public priceConverter;
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
@@ -726,7 +733,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
     constructor(
         address _stakingReward,
         address _rewardToken,
-        // address _bnbUsdPriceFeed,
+        address _bnbUsdPriceFeed,
         address _feeCollector,
         uint256 _lockDuration,
         uint256 _apy,
@@ -739,6 +746,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
         rewardToken =  IBEP20(_rewardToken);
         feeCollector = _feeCollector;
         // priceFeed =  IOrocleAggregatorV2(_bnbUsdPriceFeed);
+         priceConverter = PriceConverter(_bnbUsdPriceFeed);
         
         apy = _apy;// 100 for start
         lockDuration = _lockDuration;
@@ -806,27 +814,25 @@ contract TaccStaking is Ownable, ReentrancyGuard {
         }
     }
 
+    function getAmountOfFeeInBNB() public view returns(uint256) {
+    uint256 usdFee = fixedUsdFee;
+    uint256 bnbPrice = priceConverter.getPrice();
+    uint256 requiredBNB = (usdFee * 1e18) / bnbPrice;
+    return requiredBNB;
+}
+
     // Stake primary tokens
     function deposit(uint256 _amount) public payable nonReentrant {
 
-        // uint256 requiredFee = getBnbFee();
-         uint256 requiredFee = fixedUsdFee;
-    // require(msg.value >= requiredFee, "Insufficient fee");
+     uint256 requiredFee = getAmountOfFeeInBNB();
+        
     if(requiredFee > 0) {
+         require(msg.value >= requiredFee, "Insufficient fee");
         _sendFees(feeCollector, requiredFee);
     } else {
         revert InsufficientFee();
     }
-    //    if(msg.value < requiredFee) revert InsufficientFee();
-
-    // // Transfer fee to collector
-    //    payable(feeCollector).transfer(requiredFee);
-
-    // // Refund excess BNB
-    // if (msg.value > requiredFee) {
-    //     payable(msg.sender).transfer(msg.value - requiredFee);
-    // }
-
+  
         if(holderUnlockTime[msg.sender] == 0){
             holderUnlockTime[msg.sender] = block.timestamp + lockDuration;
         }
@@ -858,19 +864,11 @@ contract TaccStaking is Ownable, ReentrancyGuard {
 
     // Withdraw primary tokens from STAKING.
 
-    function withdraw() public payable  nonReentrant {
-         uint256 requiredFee = fixedUsdFee;
-    // require(msg.value >= requiredFee, "Insufficient fee");
-    //    if(msg.value < requiredFee) revert InsufficientFee();
+    function withdraw(uint256 _amount) public payable  nonReentrant {
+         uint256 requiredFee = getAmountOfFeeInBNB();
 
-    // Transfer fee to collector
-    //    payable(feeCollector).transfer(requiredFee);
-
-    // Refund excess BNB
-    // if (msg.value > requiredFee) {
-    //     payable(msg.sender).transfer(msg.value - requiredFee);
-    // }
         if(requiredFee > 0) {
+         require(msg.value >= requiredFee, "Insufficient fee");
         _sendFees(feeCollector, requiredFee);
     } else {
         
@@ -884,7 +882,8 @@ contract TaccStaking is Ownable, ReentrancyGuard {
         PoolInfo storage pool = poolInfo[0];
         UserInfo storage user = userInfo[msg.sender];
 
-        uint256 _amount = user.amount;
+         _amount = user.amount;
+        //   user.amount = _amount
         updatePool(0);
         uint256 pending = user.amount.mul(pool.accTokensPerShare).div(1e12).sub(user.rewardDebt);
         if(pending > 0) {
@@ -1005,6 +1004,10 @@ contract TaccStaking is Ownable, ReentrancyGuard {
  function setFees(uint256 newFees) external onlyOwner {
      fixedUsdFee = newFees;
  }
+
+  function getPriceofBNB() public view returns(uint256) {
+      return priceConverter.getPrice();
+  }
 //   function setOrocle(address newOrocle) external onlyOwner {
         
 //         priceFeed = IOrocleAggregatorV2(newOrocle);
