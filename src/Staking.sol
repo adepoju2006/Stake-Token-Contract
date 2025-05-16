@@ -686,6 +686,7 @@ abstract contract ReentrancyGuard {
 contract TaccStaking is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
+    using PriceConverter for uint256;
      error InsufficientFee();
      error InvalidAddress();
     // AggregatorV3Interface public  priceFeed;
@@ -717,7 +718,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
     // IOrocleAggregatorV2 private  priceFeed;
     uint256 public fixedUsdFee = 0.5 * 10 ** 18; 
     address public feeCollector;
-     PriceConverter public priceConverter;
+    //  PriceConverter priceConverter;
     // Info of each pool.
     PoolInfo[] public poolInfo;
     // Info of each user that stakes LP tokens.
@@ -733,7 +734,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
     constructor(
         address _stakingReward,
         address _rewardToken,
-        address _bnbUsdPriceFeed,
+        // address _bnbUsdPriceFeed,
         address _feeCollector,
         uint256 _lockDuration,
         uint256 _apy,
@@ -746,7 +747,9 @@ contract TaccStaking is Ownable, ReentrancyGuard {
         rewardToken =  IBEP20(_rewardToken);
         feeCollector = _feeCollector;
         // priceFeed =  IOrocleAggregatorV2(_bnbUsdPriceFeed);
-         priceConverter = PriceConverter(_bnbUsdPriceFeed);
+        //   priceConverter = PriceConverter(_bnbUsdPriceFeed);
+        // PriceConverter(_bnbUsdPriceFeed);
+        
         
         apy = _apy;// 100 for start
         lockDuration = _lockDuration;
@@ -816,7 +819,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
 
     function getAmountOfFeeInBNB() public view returns(uint256) {
     uint256 usdFee = fixedUsdFee;
-    uint256 bnbPrice = priceConverter.getPrice();
+    uint256 bnbPrice = PriceConverter.getPrice();
     uint256 requiredBNB = (usdFee * 1e18) / bnbPrice;
     return requiredBNB;
 }
@@ -1006,7 +1009,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
  }
 
   function getPriceofBNB() public view returns(uint256) {
-      return priceConverter.getPrice();
+      return PriceConverter.getPrice();
   }
 //   function setOrocle(address newOrocle) external onlyOwner {
         

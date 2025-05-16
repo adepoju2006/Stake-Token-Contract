@@ -5,22 +5,22 @@ import {AggregatorV3Interface} from "lib/chainlink/contracts/src/v0.8/shared/int
 
 // Why is this a library and not abstract?
 // Why not an interface?
-contract PriceConverter  {
+library PriceConverter  {
     // We could make this public, but then we'd have to deploy it
 
-     address public priceFeedAddress;
+    //  address public priceFeedAddress;
 
-    constructor(address _priceFeedAddress) {
-        priceFeedAddress = _priceFeedAddress;
-    }
+    // constructor(address _priceFeedAddress) {
+    //     priceFeedAddress = _priceFeedAddress;
+    // }
 
     function getPrice() public view returns (uint256) {
         // Sepolia ETH / USD Address
         // https://docs.chain.link/data-feeds/price-feeds/addresses
         AggregatorV3Interface priceFeed = AggregatorV3Interface(
             // 0x694AA1769357215DE4FAC081bf1f309aDC325306 ETH/USD
-            // 0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526 BNB/USD
-             priceFeedAddress
+            0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526 //BNB/USD
+            //  priceFeedAddress
         );
         (, int256 answer, , , ) = priceFeed.latestRoundData();
         // ETH/USD rate in 18 digit
