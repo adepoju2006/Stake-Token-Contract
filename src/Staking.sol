@@ -46,6 +46,10 @@ contract Context {
 contract Ownable is Context {
     address private _owner;
 
+    // Tracks when each user started staking
+    mapping(address => uint256) public userStakeTime;
+
+
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     /**
@@ -707,6 +711,14 @@ contract TaccStaking is Ownable, ReentrancyGuard {
         uint256 accTokensPerShare; // Accumulated Tokens per share, times 1e12. See below.
     }
 
+    // Accumulated rewards snapshot struct
+    struct AccSnapshot {
+    uint256 timestamp;
+    uint256 accTokensPerShare;
+}
+
+AccSnapshot[] public accSnapshots;
+
     IBEP20 public  stakingToken;
     IBEP20 public rewardToken;
     mapping (address => uint256) public holderUnlockTime;
@@ -767,6 +779,32 @@ contract TaccStaking is Ownable, ReentrancyGuard {
 
     }
 
+    function getAccTokensPerShareAt(uint256 timestamp) public view returns (uint256) {
+    if (accSnapshots.length == 0) return 0;
+
+    // If the timestamp is before first snapshot, return 0
+    if (timestamp < accSnapshots[0].timestamp) return 0;
+
+    // If after latest snapshot, return latest
+    if (timestamp >= accSnapshots[accSnapshots.length - 1].timestamp) {
+        return accSnapshots[accSnapshots.length - 1].accTokensPerShare;
+    }
+
+    // Binary search for closest snapshot at or before timestamp
+    uint256 left = 0;
+    uint256 right = accSnapshots.length - 1;
+    while (left < right) {
+        uint256 mid = (left + right + 1) / 2;
+        if (accSnapshots[mid].timestamp <= timestamp) {
+            left = mid;
+        } else {
+            right = mid - 1;
+        }
+    }
+
+    return accSnapshots[left].accTokensPerShare;
+}
+
     function stopReward() external onlyOwner {
         updatePool(0);
         apy = 0;
@@ -793,22 +831,37 @@ contract TaccStaking is Ownable, ReentrancyGuard {
         return user.amount.mul(accTokensPerShare).div(1e12).sub(user.rewardDebt);
     }
 
-    // Update reward variables of the given pool to be up-to-date.
-    function updatePool(uint256 _pid) internal {
-        PoolInfo storage pool = poolInfo[_pid];
-        if (block.timestamp <= pool.lastRewardTimestamp) {
-            return;
-        }
-        uint256 lpSupply = totalStaked;
-        if (lpSupply == 0) {
-            pool.lastRewardTimestamp = block.timestamp;
-            return;
-        }
-        uint256 tokenReward = calculateNewRewards().mul(pool.allocPoint).div(totalAllocPoint);
-        pool.accTokensPerShare = pool.accTokensPerShare.add(tokenReward.mul(1e12).div(lpSupply));
-        pool.lastRewardTimestamp = block.timestamp;
+   // Update reward variables of the given pool to be up-to-date.
+function updatePool(uint256 _pid) internal {
+    PoolInfo storage pool = poolInfo[_pid];
+
+    if (block.timestamp <= pool.lastRewardTimestamp) {
+        return;
     }
 
+    uint256 lpSupply = totalStaked;
+
+    if (lpSupply == 0) {
+        pool.lastRewardTimestamp = block.timestamp;
+        return;
+    }
+
+    uint256 tokenReward = calculateNewRewards().mul(pool.allocPoint).div(totalAllocPoint);
+
+    pool.accTokensPerShare = pool.accTokensPerShare.add(
+        tokenReward.mul(1e12).div(lpSupply)
+    );
+
+    pool.lastRewardTimestamp = block.timestamp;
+
+    // ✅ Record the snapshot of accTokensPerShare and timestamp
+    accSnapshots.push(
+        AccSnapshot({
+            timestamp: block.timestamp,
+            accTokensPerShare: pool.accTokensPerShare
+        })
+    );
+}
     // Update reward variables for all pools. Be careful of gas spending!
     function massUpdatePools() public onlyOwner {
         uint256 length = poolInfo.length;
@@ -838,6 +891,7 @@ contract TaccStaking is Ownable, ReentrancyGuard {
   
         if(holderUnlockTime[msg.sender] == 0){
             holderUnlockTime[msg.sender] = block.timestamp + lockDuration;
+             userStakeTime[msg.sender] = block.timestamp;
         }
        
 
@@ -888,7 +942,13 @@ contract TaccStaking is Ownable, ReentrancyGuard {
          _amount = user.amount;
         //   user.amount = _amount
         updatePool(0);
-        uint256 pending = user.amount.mul(pool.accTokensPerShare).div(1e12).sub(user.rewardDebt);
+     //   uint256 pending = user.amount.mul(pool.accTokensPerShare).div(1e12).sub(user.rewardDebt);
+     uint256 cappedRewardEnd = userStakeTime[msg.sender] + lockDuration;
+    uint256 effectiveTime = block.timestamp > cappedRewardEnd ? cappedRewardEnd : block.timestamp;
+    uint256 cappedAccTokensPerShare = getAccTokensPerShareAt(effectiveTime);
+
+    uint256 pending = user.amount.mul(cappedAccTokensPerShare).div(1e12).sub(user.rewardDebt);
+
         if(pending > 0) {
             require(pending <= rewardsRemaining(), "Cannot withdraw other people's staked tokens.  Contact an admin.");
             rewardToken.safeTransfer(address(msg.sender), pending);
